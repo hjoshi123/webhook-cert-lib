@@ -14,9 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package authority
+package leadercontrollers
 
 import (
+	"context"
+	"time"
+
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,18 +29,36 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-type reconciler struct {
-	client.Client
-	Cache cache.Cache
-	Opts  Options
+type Reconciler struct {
+	Patcher Patcher
+	Cache   cache.Cache
+	Opts    CAOptions
 }
 
-func (r reconciler) caSecretSource(handler handler.TypedEventHandler[*corev1.Secret, reconcile.Request]) source.SyncingSource {
+type Patcher interface {
+	// Patch patches the given obj in the Kubernetes cluster. obj must be a
+	// struct pointer so that obj can be updated with the content returned by the Server.
+	Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error
+}
+
+type CAOptions struct {
+	// The namespace used for certificate secrets.
+	Namespace string
+
+	// The name of the Secret used to store CA certificates.
+	Name string
+
+	// The amount of time the root CA certificate will be valid for.
+	// This must be greater than LeafDuration.
+	Duration time.Duration
+}
+
+func (r Reconciler) caSecretSource(handler handler.TypedEventHandler[*corev1.Secret, reconcile.Request]) source.SyncingSource {
 	return source.Kind(
 		r.Cache,
 		&corev1.Secret{},
 		handler,
 		predicate.NewTypedPredicateFuncs[*corev1.Secret](func(obj *corev1.Secret) bool {
-			return obj.Namespace == r.Opts.Namespace && obj.Name == r.Opts.CASecret
+			return obj.Namespace == r.Opts.Namespace && obj.Name == r.Opts.Name
 		}))
 }

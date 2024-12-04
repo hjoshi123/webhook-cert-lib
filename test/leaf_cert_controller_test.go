@@ -14,44 +14,69 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package authority
+package test
 
 import (
+	"crypto/tls"
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	"github.com/cert-manager/webhook-cert-lib/internal/pki"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/cert"
+	leadercontrollers "github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers"
 )
 
-var _ = Describe("Injectable Controller", Ordered, func() {
+var _ = Describe("Leaf Certificate Controller", Ordered, func() {
 	var (
 		caSecret    *corev1.Secret
 		caSecretRef types.NamespacedName
+		certHolder  *cert.CertificateHolder
 	)
 
 	BeforeAll(func() {
+		opts := authority.Options{
+			CAOptions: leadercontrollers.CAOptions{
+				Name:      "ca-cert",
+				Namespace: "leaf-cert-controller",
+				Duration:  7 * time.Hour,
+			},
+			LeafOptions: authority.LeafOptions{
+				Duration: 1 * time.Hour,
+			},
+		}
+
 		ns := &corev1.Namespace{}
-		ns.Name = "injectable-controller"
+		ns.Name = opts.CAOptions.Namespace
 		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 
+		caCert, caPK, err := cert.GenerateCA(opts.CAOptions.Duration)
+		Expect(err).ToNot(HaveOccurred())
+		caCertBytes, err := pki.EncodeX509(caCert)
+		Expect(err).ToNot(HaveOccurred())
+		pkBytes, err := pki.EncodePrivateKey(caPK)
+		Expect(err).ToNot(HaveOccurred())
+
 		caSecret = &corev1.Secret{}
-		caSecret.Namespace = ns.Name
-		caSecret.Name = "ca-cert"
+		caSecret.Namespace = opts.CAOptions.Namespace
+		caSecret.Name = opts.CAOptions.Name
 		caSecret.Type = corev1.SecretTypeTLS
 		caSecret.Labels = map[string]string{
-			DynamicAuthoritySecretLabel: "true",
+			api.DynamicAuthoritySecretLabel: "true",
 		}
 		caSecret.Data = map[string][]byte{
-			corev1.TLSCertKey:       []byte("CA cert injectable"),
-			corev1.TLSPrivateKeyKey: []byte("CA cert key injectable"),
-			TLSCABundleKey:          []byte("CA bundle injectable"),
+			corev1.TLSCertKey:       caCertBytes,
+			corev1.TLSPrivateKeyKey: pkBytes,
 		}
 		Expect(k8sClient.Create(ctx, caSecret)).To(Succeed())
 		caSecretRef = client.ObjectKeyFromObject(caSecret)
@@ -64,15 +89,11 @@ var _ = Describe("Injectable Controller", Ordered, func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 
-		controller := &InjectableReconciler{
-			reconciler: reconciler{
-				Client: k8sManager.GetClient(),
-				Cache:  k8sManager.GetCache(),
-				Opts: Options{
-					Namespace: caSecretRef.Namespace,
-					CASecret:  caSecretRef.Name,
-				}},
-			Injectable: &ValidatingWebhookCaBundleInject{},
+		certHolder = &cert.CertificateHolder{}
+		controller := &authority.LeafCertReconciler{
+			Options:           opts,
+			Cache:             k8sManager.GetCache(),
+			CertificateHolder: certHolder,
 		}
 		Expect(controller.SetupWithManager(k8sManager)).To(Succeed())
 
@@ -83,26 +104,15 @@ var _ = Describe("Injectable Controller", Ordered, func() {
 		}()
 	})
 
-	Context("ValidatingWebhookConfiguration", func() {
-		var vwc *admissionregistrationv1.ValidatingWebhookConfiguration
-
-		It("should inject CA bundle", func() {
-			vwc = NewValidatingWebhookConfigurationForTest("test-vwc", caSecretRef)
-			Expect(k8sClient.Create(ctx, vwc)).To(Succeed())
-		})
-
-		It("should update CA bundle when bundle updated", func() {
-			caSecret.Data[TLSCABundleKey] = []byte("updated CA bundle")
-			Expect(k8sClient.Update(ctx, caSecret)).To(Succeed())
-		})
-
-		AfterEach(func() {
-			Eventually(komega.Object(vwc)).Should(
-				HaveField("Webhooks", HaveEach(
-					HaveField("ClientConfig.CABundle", Equal(caSecret.Data[TLSCABundleKey])),
-				)),
-			)
-		})
+	BeforeEach(func() {
+		caSecret = &corev1.Secret{}
+		caSecret.Namespace = caSecretRef.Namespace
+		caSecret.Name = caSecretRef.Name
 	})
 
+	It("should set certificate", func() {
+		Eventually(func() (*tls.Certificate, error) {
+			return certHolder.GetCertificate(nil)
+		}).ShouldNot(BeNil())
+	})
 })

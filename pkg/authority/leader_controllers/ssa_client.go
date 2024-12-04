@@ -14,9 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package authority
+package leadercontrollers
 
 import (
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers/injectable"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,12 +27,12 @@ const (
 	fieldOwner = client.FieldOwner("cert-manager-dynamic-authority")
 )
 
-func newApplyPatch(ac ApplyConfiguration) applyPatch {
+func newApplyPatch(ac injectable.ApplyConfiguration) applyPatch {
 	return applyPatch{ac: ac}
 }
 
 type applyPatch struct {
-	ac ApplyConfiguration
+	ac injectable.ApplyConfiguration
 }
 
 func (p applyPatch) Type() types.PatchType {

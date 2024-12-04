@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package authority
+package test
 
 import (
 	"errors"
@@ -29,22 +29,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
 	"github.com/cert-manager/webhook-cert-lib/internal/pki"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
 )
 
 func assertCASecret(secret *corev1.Secret) {
 	Eventually(komega.Object(secret)).Should(And(
-		HaveField("Labels", HaveKeyWithValue(DynamicAuthoritySecretLabel, "true")),
+		HaveField("Labels", HaveKeyWithValue(api.DynamicAuthoritySecretLabel, "true")),
 		HaveField("Type", Equal(corev1.SecretTypeTLS)),
 		HaveField("Data", And(
 			HaveKeyWithValue(corev1.TLSCertKey, Not(BeEmpty())),
 			HaveKeyWithValue(corev1.TLSPrivateKeyKey, Not(BeEmpty())),
-			HaveKeyWithValue(TLSCABundleKey, Not(BeEmpty())),
+			HaveKeyWithValue(api.TLSCABundleKey, Not(BeEmpty())),
 		)),
 	))
 
 	cert, err := pki.DecodeX509CertificateBytes(secret.Data[corev1.TLSCertKey])
 	Expect(err).ToNot(HaveOccurred())
-	caBundle, err := pki.DecodeX509CertificateSetBytes(secret.Data[TLSCABundleKey])
+	caBundle, err := pki.DecodeX509CertificateSetBytes(secret.Data[api.TLSCABundleKey])
 	Expect(err).ToNot(HaveOccurred())
 
 	Expect(secretPublicKeysDiffer(secret)).To(BeFalse())
@@ -56,8 +57,8 @@ func NewValidatingWebhookConfigurationForTest(name string, caSecret types.Namesp
 	vwc := &admissionregistrationv1.ValidatingWebhookConfiguration{}
 	vwc.Name = name
 	vwc.Labels = map[string]string{
-		WantInjectFromSecretNamespaceLabel: caSecret.Namespace,
-		WantInjectFromSecretNameLabel:      caSecret.Name,
+		api.WantInjectFromSecretNamespaceLabel: caSecret.Namespace,
+		api.WantInjectFromSecretNameLabel:      caSecret.Name,
 	}
 	vwc.Webhooks = []admissionregistrationv1.ValidatingWebhook{
 		newValidatingWebhookForTest("foo-webhook.cert-manager.io"),

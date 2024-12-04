@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package authority
+package test
 
 import (
 	"time"
@@ -30,6 +30,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/cert-manager/webhook-cert-lib/internal/pki"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
+	leadercontrollers "github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers"
 )
 
 var _ = Describe("CA Secret Controller", Ordered, func() {
@@ -56,14 +58,14 @@ var _ = Describe("CA Secret Controller", Ordered, func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 
-		controller := &CASecretReconciler{
-			reconciler: reconciler{
-				Client: k8sManager.GetClient(),
-				Cache:  k8sManager.GetCache(),
-				Opts: Options{
-					Namespace:  caSecretRef.Namespace,
-					CASecret:   caSecretRef.Name,
-					CADuration: 7 * time.Hour,
+		controller := &leadercontrollers.CASecretReconciler{
+			Reconciler: leadercontrollers.Reconciler{
+				Patcher: k8sManager.GetClient(),
+				Cache:   k8sManager.GetCache(),
+				Opts: leadercontrollers.CAOptions{
+					Name:      caSecretRef.Name,
+					Namespace: caSecretRef.Namespace,
+					Duration:  7 * time.Hour,
 				}}}
 		Expect(controller.SetupWithManager(k8sManager)).To(Succeed())
 
@@ -108,7 +110,7 @@ var _ = Describe("CA Secret Controller", Ordered, func() {
 	It("should retain old CA if CA is rotated", func() {
 		assertCASecret(caSecret)
 
-		caBundleCerts, err := pki.DecodeX509CertificateSetBytes(caSecret.Data[TLSCABundleKey])
+		caBundleCerts, err := pki.DecodeX509CertificateSetBytes(caSecret.Data[api.TLSCABundleKey])
 		Expect(err).ToNot(HaveOccurred())
 		Expect(caBundleCerts).To(HaveLen(1))
 
@@ -119,7 +121,7 @@ var _ = Describe("CA Secret Controller", Ordered, func() {
 		)
 
 		By("requesting a renewal")
-		caSecret.Annotations = map[string]string{RenewCertificateSecretAnnotation: time.Now().String()}
+		caSecret.Annotations = map[string]string{api.RenewCertificateSecretAnnotation: time.Now().String()}
 		Expect(k8sClient.Update(ctx, caSecret)).To(Succeed())
 
 		Eventually(komega.Object(caSecret)).Should(
@@ -132,7 +134,7 @@ var _ = Describe("CA Secret Controller", Ordered, func() {
 			HaveField("Data", HaveKeyWithValue(corev1.TLSCertKey, Equal(certBytes))),
 		)
 
-		caBundleCerts, err = pki.DecodeX509CertificateSetBytes(caSecret.Data[TLSCABundleKey])
+		caBundleCerts, err = pki.DecodeX509CertificateSetBytes(caSecret.Data[api.TLSCABundleKey])
 		Expect(err).ToNot(HaveOccurred())
 		Expect(caBundleCerts).To(HaveLen(2))
 	})

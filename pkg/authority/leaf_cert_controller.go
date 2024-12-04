@@ -19,31 +19,32 @@ package authority
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	"github.com/cert-manager/webhook-cert-lib/internal/pki"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/cert"
 )
 
 // LeafCertReconciler reconciles the leaf/serving certificate
 type LeafCertReconciler struct {
-	reconciler
-	certificateHolder *CertificateHolder
+	Options           Options
+	Cache             cache.Cache
+	CertificateHolder *cert.CertificateHolder
 }
-
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LeafCertReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("cert_leaf").
-		WatchesRawSource(r.caSecretSource(&handler.TypedEnqueueRequestForObject[*corev1.Secret]{})).
+		Watches(&corev1.Secret{}, &handler.TypedEnqueueRequestForObject[client.Object]{}).
 		// Disable leader election since all replicas need a serving certificate
 		WithOptions(controller.TypedOptions[ctrl.Request]{NeedLeaderElection: ptr.To(false)}).
 		Complete(r)
@@ -55,31 +56,27 @@ func (r *LeafCertReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 func (r *LeafCertReconciler) reconcileSecret(ctx context.Context, req ctrl.Request) error {
 	caSecret := &corev1.Secret{}
-	if err := r.Get(ctx, req.NamespacedName, caSecret); err != nil {
+	if err := r.Cache.Get(ctx, req.NamespacedName, caSecret); err != nil {
 		if errors.IsNotFound(err) {
 			return nil
 		}
 		return err
 	}
-	caCertBytes := caSecret.Data[corev1.TLSCertKey]
-	caPkBytes := caSecret.Data[corev1.TLSPrivateKeyKey]
 
-	pk, err := pki.GenerateECPrivateKey(384)
+	caCert, err := pki.DecodeX509CertificateBytes(caSecret.Data[corev1.TLSCertKey])
+	if err != nil {
+		return err
+	}
+	caPk, err := pki.DecodePrivateKeyBytes(caSecret.Data[corev1.TLSPrivateKeyKey])
 	if err != nil {
 		return err
 	}
 
-	// create the certificate template to be signed
-	template := &x509.Certificate{
-		Version:            3,
-		PublicKeyAlgorithm: x509.ECDSA,
-		PublicKey:          pk.Public(),
-		DNSNames:           r.Opts.DNSNames,
-		KeyUsage:           x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	}
-
-	cert, err := Sign(r.Opts, template, caCertBytes, caPkBytes)
+	cert, pk, err := cert.GenerateLeaf(
+		r.Options.LeafOptions.DNSNames,
+		r.Options.LeafOptions.Duration,
+		caCert, caPk,
+	)
 	if err != nil {
 		return err
 	}
@@ -99,6 +96,6 @@ func (r *LeafCertReconciler) reconcileSecret(ctx context.Context, req ctrl.Reque
 		return err
 	}
 
-	r.certificateHolder.SetCertificate(&tlsCert)
+	r.CertificateHolder.SetCertificate(&tlsCert)
 	return nil
 }

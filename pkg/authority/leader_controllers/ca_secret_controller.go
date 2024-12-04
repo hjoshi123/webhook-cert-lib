@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package authority
+package leadercontrollers
 
 import (
 	"context"
@@ -23,6 +23,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,34 +33,31 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/cert-manager/webhook-cert-lib/internal/pki"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/cert"
+	"github.com/go-logr/logr"
 )
 
 // CASecretReconciler reconciles a CA Secret object
 type CASecretReconciler struct {
-	reconciler
+	Reconciler
 	events chan event.TypedGenericEvent[*corev1.Secret]
 }
 
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;patch
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *CASecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.events = make(chan event.TypedGenericEvent[*corev1.Secret])
-	go func() {
-		obj := &corev1.Secret{}
-		obj.Namespace = r.Opts.Namespace
-		obj.Name = r.Opts.CASecret
-		r.events <- event.TypedGenericEvent[*corev1.Secret]{Object: obj}
-	}()
+	r.events = make(chan event.TypedGenericEvent[*corev1.Secret], 1)
+	r.events <- event.TypedGenericEvent[*corev1.Secret]{Object: &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      r.Opts.Name,
+			Namespace: r.Opts.Namespace,
+		},
+	}}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("cert_ca_secret").
 		WatchesRawSource(r.caSecretSource(&handler.TypedEnqueueRequestForObject[*corev1.Secret]{})).
-		WatchesRawSource(
-			source.Channel(
-				r.events,
-				&handler.TypedEnqueueRequestForObject[*corev1.Secret]{}),
-		).
+		WatchesRawSource(source.Channel(r.events, &handler.TypedEnqueueRequestForObject[*corev1.Secret]{})).
 		Complete(r)
 }
 
@@ -69,7 +67,7 @@ func (r *CASecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 func (r *CASecretReconciler) reconcileSecret(ctx context.Context, req ctrl.Request) error {
 	secret := &corev1.Secret{}
-	if err := r.Get(ctx, req.NamespacedName, secret); err != nil {
+	if err := r.Cache.Get(ctx, req.NamespacedName, secret); err != nil {
 		if !errors.IsNotFound(err) {
 			return err
 		}
@@ -78,84 +76,74 @@ func (r *CASecretReconciler) reconcileSecret(ctx context.Context, req ctrl.Reque
 		secret.Name = req.Name
 	}
 
-	generate, cert, pk := r.needsGenerate(secret)
+	generate, caCert, caPk := r.needsGenerate(secret)
 
-	if generate || secret.Annotations[RenewCertificateSecretAnnotation] != secret.Annotations[RenewHandledCertificateSecretAnnotation] {
+	if generate || secret.Annotations[api.RenewCertificateSecretAnnotation] != secret.Annotations[api.RenewHandledCertificateSecretAnnotation] {
 		var err error
-		cert, pk, err = generateCA(r.Opts)
+		caCert, caPk, err = cert.GenerateCA(r.Opts.Duration)
 		if err != nil {
 			return err
 		}
 	}
 
-	certBytes, err := pki.EncodeX509(cert)
+	certBytes, err := pki.EncodeX509(caCert)
 	if err != nil {
 		return err
 	}
-	pkBytes, err := pki.EncodePrivateKey(pk)
+	pkBytes, err := pki.EncodePrivateKey(caPk)
 	if err != nil {
 		return err
 	}
 
-	caBundleBytes, err := r.reconcileCABundle(secret.Data[TLSCABundleKey], cert)
-	if err != nil {
-		log.FromContext(ctx).V(1).Error(err, "when reconciling CA bundle")
-		caBundleBytes = certBytes
-	}
+	caBundleBytes := addCertToCABundle(log.FromContext(ctx), secret.Data[api.TLSCABundleKey], caCert)
 
 	ac := corev1ac.Secret(secret.Name, secret.Namespace).
 		WithLabels(map[string]string{
-			DynamicAuthoritySecretLabel: "true",
+			api.DynamicAuthoritySecretLabel: "true",
 		}).
 		WithType(corev1.SecretTypeTLS).
 		WithData(map[string][]byte{
 			corev1.TLSCertKey:       certBytes,
 			corev1.TLSPrivateKeyKey: pkBytes,
-			TLSCABundleKey:          caBundleBytes,
+			api.TLSCABundleKey:      caBundleBytes,
 		})
 
-	if v, ok := secret.Annotations[RenewCertificateSecretAnnotation]; ok {
+	if v, ok := secret.Annotations[api.RenewCertificateSecretAnnotation]; ok {
 		ac.WithAnnotations(map[string]string{
-			RenewHandledCertificateSecretAnnotation: v,
+			api.RenewHandledCertificateSecretAnnotation: v,
 		})
 	}
 
-	return r.Patch(ctx, secret, newApplyPatch(ac), client.ForceOwnership, fieldOwner)
+	return r.Patcher.Patch(ctx, secret, newApplyPatch(ac), client.ForceOwnership, fieldOwner)
 }
 
-func (r *CASecretReconciler) reconcileCABundle(caBundleBytes []byte, caCert *x509.Certificate) ([]byte, error) {
+func addCertToCABundle(logger logr.Logger, caBundleBytes []byte, caCert *x509.Certificate) []byte {
 	certPool := pki.NewCertPool(pki.WithFilteredExpiredCerts(true))
 
-	if len(caBundleBytes) > 0 {
-		caBundle, err := pki.DecodeX509CertificateSetBytes(caBundleBytes)
-		if err != nil {
-			return nil, err
-		}
-		for _, c := range caBundle {
-			certPool.AddCert(c)
-		}
+	if err := certPool.AddCertsFromPEM(caBundleBytes); err != nil {
+		logger.Error(err, "failed to re-use existing CAs in new set of CAs")
 	}
-
+	// TODO: handle AddCert returning false? I expect this will never happen.
 	certPool.AddCert(caCert)
 
-	return []byte(certPool.PEM()), nil
+	return []byte(certPool.PEM())
 }
 
 func (r *CASecretReconciler) needsGenerate(secret *corev1.Secret) (bool, *x509.Certificate, crypto.Signer) {
-	cert, err := pki.DecodeX509CertificateBytes(secret.Data[corev1.TLSCertKey])
+	caCert, err := pki.DecodeX509CertificateBytes(secret.Data[corev1.TLSCertKey])
 	if err != nil {
 		return true, nil, nil
 	}
-	pk, err := pki.DecodePrivateKeyBytes(secret.Data[corev1.TLSPrivateKeyKey])
+	caPk, err := pki.DecodePrivateKeyBytes(secret.Data[corev1.TLSPrivateKeyKey])
 	if err != nil {
 		return true, nil, nil
 	}
 
-	equal, err := pki.PublicKeysEqual(cert.PublicKey, pk.Public())
+	equal, err := pki.PublicKeysEqual(caCert.PublicKey, caPk.Public())
 	if !equal || err != nil {
 		return true, nil, nil
 	}
 
 	// TODO: Trigger renew check due
-	return false, cert, pk
+	return false, caCert, caPk
 }
