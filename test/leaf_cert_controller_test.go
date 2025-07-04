@@ -1,5 +1,5 @@
 /*
-Copyright The cert-manager Authors.
+Copyright 2025 The cert-manager Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,9 +20,6 @@ import (
 	"crypto/tls"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -35,6 +32,9 @@ import (
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/cert"
 	leadercontrollers "github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Leaf Certificate Controller", Ordered, func() {

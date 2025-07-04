@@ -1,5 +1,5 @@
 /*
-Copyright The cert-manager Authors.
+Copyright 2025 The cert-manager Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"crypto"
 	"crypto/x509"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,7 +36,6 @@ import (
 	"github.com/cert-manager/webhook-cert-lib/internal/pki"
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/cert"
-	"github.com/go-logr/logr"
 )
 
 // CASecretReconciler reconciles a CA Secret object

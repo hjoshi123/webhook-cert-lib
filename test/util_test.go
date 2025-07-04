@@ -1,5 +1,5 @@
 /*
-Copyright The cert-manager Authors.
+Copyright 2025 The cert-manager Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,8 +20,6 @@ import (
 	"errors"
 	"fmt"
 
-	. "github.com/onsi/gomega"
-
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,6 +28,8 @@ import (
 
 	"github.com/cert-manager/webhook-cert-lib/internal/pki"
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
+
+	. "github.com/onsi/gomega"
 )
 
 func assertCASecret(secret *corev1.Secret) {

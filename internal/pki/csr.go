@@ -1,5 +1,5 @@
 /*
-Copyright The cert-manager Authors.
+Copyright 2020 The cert-manager Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -114,7 +114,7 @@ func EncodeX509(cert *x509.Certificate) ([]byte, error) {
 func signatureAlgorithmFromPublicKey(alg x509.PublicKeyAlgorithm, arg any) (x509.SignatureAlgorithm, error) {
 	var signatureAlgorithm x509.SignatureAlgorithm
 
-	switch alg {
+	switch alg { //nolint:exhaustive // There is a default that appears to be not picked up by the linter
 	case x509.RSA:
 		size, ok := arg.(int)
 		if !ok {

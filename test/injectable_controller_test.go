@@ -1,5 +1,5 @@
 /*
-Copyright The cert-manager Authors.
+Copyright 2025 The cert-manager Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,12 +17,6 @@ limitations under the License.
 package test
 
 import (
-	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
-	"github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers/injectable"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-
-	leadercontrollers "github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,6 +25,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
+	leadercontrollers "github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers/injectable"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Injectable Controller", Ordered, func() {
