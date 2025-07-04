@@ -23,3 +23,13 @@ test-unit: | $(NEEDS_GOTESTSUM) $(ARTIFACTS)
 		./... \
 		-- \
 		-ldflags $(go_manager_ldflags)
+
+.PHONY: test-integration
+## Integration tests
+## @category Testing
+test-integration: | $(NEEDS_GINKGO) $(NEEDS_ETCD) $(NEEDS_KUBE-APISERVER) $(NEEDS_KUBECTL) $(ARTIFACTS)
+	KUBEBUILDER_ASSETS=$(CURDIR)/$(bin_dir)/tools \
+	$(GINKGO) \
+		--output-dir=$(ARTIFACTS) \
+		--junit-report=junit-go-e2e.xml \
+		./test/
