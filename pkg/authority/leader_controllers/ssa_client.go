@@ -17,10 +17,11 @@ limitations under the License.
 package leadercontrollers
 
 import (
-	"github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers/injectable"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers/injectable"
 )
 
 const (

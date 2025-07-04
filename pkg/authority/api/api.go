@@ -24,16 +24,16 @@ const (
 	// `inject-dynamic-ca-from-secret` label.
 	// If an injectable references a Secret that does NOT have this annotation,
 	// the dynamic ca-injector will refuse to inject the secret.
-	DynamicAuthoritySecretLabel = "cert-manager.io/allow-dynamic-ca-injection"
+	DynamicAuthoritySecretLabel = "cert-manager.io/allow-dynamic-ca-injection" //#nosec G101 - This is not credentials
 	// WantInjectFromSecretNamespaceLabel is the label that specifies that a
 	// particular object wants injection of dynamic CAs from secret in
 	// namespace.
 	// Must be used in conjunction with WantInjectFromSecretNameLabel.
-	WantInjectFromSecretNamespaceLabel = "cert-manager.io/inject-dynamic-ca-from-secret-namespace"
+	WantInjectFromSecretNamespaceLabel = "cert-manager.io/inject-dynamic-ca-from-secret-namespace" //#nosec G101 - This is not credentials
 	// WantInjectFromSecretNameLabel is the label that specifies that a
 	// particular object wants injection of dynamic CAs from secret with name.
 	// Must be used in conjunction with WantInjectFromSecretNamespaceLabel.
-	WantInjectFromSecretNameLabel = "cert-manager.io/inject-dynamic-ca-from-secret-name"
+	WantInjectFromSecretNameLabel = "cert-manager.io/inject-dynamic-ca-from-secret-name" //#nosec G101 - This is not credentials
 
 	// TLSCABundleKey is used as a data key in Secret resources to store a CA
 	// certificate bundle.
@@ -42,9 +42,9 @@ const (
 	// RenewCertificateSecretAnnotation is an annotation that can be set to
 	// an arbitrary value on a certificate secret to trigger a renewal of the
 	// certificate managed in the secret.
-	RenewCertificateSecretAnnotation = "renew.cert-manager.io/requestedAt"
+	RenewCertificateSecretAnnotation = "renew.cert-manager.io/requestedAt" //#nosec G101 - This is not credentials
 	// RenewHandledCertificateSecretAnnotation is an annotation that will be set on a
 	// certificate secret whenever a new certificate is renewed using the
 	// RenewCertificateSecretAnnotation annotation.
-	RenewHandledCertificateSecretAnnotation = "renew.cert-manager.io/lastRequestedAt"
+	RenewHandledCertificateSecretAnnotation = "renew.cert-manager.io/lastRequestedAt" //#nosec G101 - This is not credentials
 )

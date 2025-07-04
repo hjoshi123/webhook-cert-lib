@@ -21,6 +21,7 @@ import (
 	"crypto"
 	"crypto/x509"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,7 +36,6 @@ import (
 	"github.com/cert-manager/webhook-cert-lib/internal/pki"
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/cert"
-	"github.com/go-logr/logr"
 )
 
 // CASecretReconciler reconciles a CA Secret object

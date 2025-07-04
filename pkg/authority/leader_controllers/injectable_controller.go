@@ -20,8 +20,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
-	"github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers/injectable"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -33,6 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers/injectable"
 )
 
 // InjectableReconciler injects CA bundle into resources
@@ -69,11 +70,11 @@ func (r *InjectableReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					}
 
 					requests := make([]reconcile.Request, len(objList.Items))
-					for _, obj := range objList.Items {
+					for i, obj := range objList.Items {
 						req := reconcile.Request{}
 						req.Namespace = obj.GetNamespace()
 						req.Name = obj.GetName()
-						requests = append(requests, req)
+						requests[i] = req
 					}
 					return requests
 				}),
