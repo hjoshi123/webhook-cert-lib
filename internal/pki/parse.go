@@ -1,5 +1,5 @@
 /*
-Copyright The cert-manager Authors.
+Copyright 2020 The cert-manager Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 
-	"github.com/cert-manager/webhook-cert-lib/internal/pki/errors"
+	"github.com/cert-manager/webhook-cert-lib/internal/errors"
 )
 
 // DecodeX509CertificateBytes will decode a PEM encoded x509 Certificate.
