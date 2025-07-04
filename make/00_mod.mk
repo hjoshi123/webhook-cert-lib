@@ -15,3 +15,5 @@
 repo_name := github.com/cert-manager/webhook-cert-lib
 
 golangci_lint_config := .golangci.yaml
+
+GINKGO_VERSION ?= $(shell awk '/ginkgo\/v2/ {print $$2}' test/go.mod)
