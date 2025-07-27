@@ -30,8 +30,7 @@ import (
 	"github.com/cert-manager/webhook-cert-lib/internal/pki"
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority"
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
-	"github.com/cert-manager/webhook-cert-lib/pkg/authority/cert"
-	leadercontrollers "github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/certificate"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -41,26 +40,29 @@ var _ = Describe("Leaf Certificate Controller", Ordered, func() {
 	var (
 		caSecret    *corev1.Secret
 		caSecretRef types.NamespacedName
-		certHolder  *cert.CertificateHolder
+		certHolder  *certificate.Holder
 	)
 
 	BeforeAll(func() {
+		caSecret = &corev1.Secret{}
+		caSecret.Namespace = "leaf-cert-controller"
+		caSecret.Name = "ca-cert"
+		caSecretRef = client.ObjectKeyFromObject(caSecret)
+
 		opts := authority.Options{
-			CAOptions: leadercontrollers.CAOptions{
-				Name:      "ca-cert",
-				Namespace: "leaf-cert-controller",
-				Duration:  7 * time.Hour,
+			CAOptions: authority.CAOptions{
+				NamespacedName: caSecretRef,
+				Duration:       7 * time.Hour,
 			},
 			LeafOptions: authority.LeafOptions{
 				Duration: 1 * time.Hour,
-			},
-		}
+			}}
 
 		ns := &corev1.Namespace{}
 		ns.Name = opts.CAOptions.Namespace
 		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 
-		caCert, caPK, err := cert.GenerateCA(opts.CAOptions.Duration)
+		caCert, caPK, err := certificate.GenerateCA(opts.CAOptions.Duration)
 		Expect(err).ToNot(HaveOccurred())
 		caCertBytes, err := pki.EncodeX509(caCert)
 		Expect(err).ToNot(HaveOccurred())
@@ -79,7 +81,6 @@ var _ = Describe("Leaf Certificate Controller", Ordered, func() {
 			corev1.TLSPrivateKeyKey: pkBytes,
 		}
 		Expect(k8sClient.Create(ctx, caSecret)).To(Succeed())
-		caSecretRef = client.ObjectKeyFromObject(caSecret)
 
 		k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 			Scheme: scheme.Scheme,
@@ -89,10 +90,13 @@ var _ = Describe("Leaf Certificate Controller", Ordered, func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 
-		certHolder = &cert.CertificateHolder{}
+		certHolder = &certificate.Holder{}
 		controller := &authority.LeafCertReconciler{
-			Options:           opts,
-			Cache:             k8sManager.GetCache(),
+			Reconciler: authority.Reconciler{
+				Patcher: k8sManager.GetClient(),
+				Cache:   k8sManager.GetCache(),
+				Options: opts,
+			},
 			CertificateHolder: certHolder,
 		}
 		Expect(controller.SetupWithManager(k8sManager)).To(Succeed())
@@ -102,12 +106,6 @@ var _ = Describe("Leaf Certificate Controller", Ordered, func() {
 			err = k8sManager.Start(ctx)
 			Expect(err).ToNot(HaveOccurred(), "failed to run manager")
 		}()
-	})
-
-	BeforeEach(func() {
-		caSecret = &corev1.Secret{}
-		caSecret.Namespace = caSecretRef.Namespace
-		caSecret.Name = caSecretRef.Name
 	})
 
 	It("should set certificate", func() {

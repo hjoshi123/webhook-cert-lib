@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package leadercontrollers
+package authority
 
 import (
 	"context"
@@ -23,7 +23,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -33,7 +32,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
-	"github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers/injectable"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/injectable"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/internal/ssa"
 )
 
 // InjectableReconciler injects CA bundle into resources
@@ -49,21 +49,21 @@ func (r *InjectableReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WatchesRawSource(
 			source.Kind(
 				r.Cache,
-				newUnstructured(r.Injectable),
+				injectable.NewUnstructured(r.Injectable),
 				&handler.TypedEnqueueRequestForObject[*unstructured.Unstructured]{},
 				predicate.NewTypedPredicateFuncs(func(obj *unstructured.Unstructured) bool {
-					return obj.GetLabels()[api.WantInjectFromSecretNamespaceLabel] == r.Opts.Namespace &&
-						obj.GetLabels()[api.WantInjectFromSecretNameLabel] == r.Opts.Name
+					return obj.GetLabels()[api.WantInjectFromSecretNamespaceLabel] == r.CAOptions.Namespace &&
+						obj.GetLabels()[api.WantInjectFromSecretNameLabel] == r.CAOptions.Name
 				}),
 			),
 		).
 		WatchesRawSource(
 			r.caSecretSource(
 				handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, _ *corev1.Secret) []reconcile.Request {
-					objList := newUnstructuredList(r.Injectable)
+					objList := injectable.NewUnstructuredList(r.Injectable)
 					if err := r.Cache.List(ctx, objList, client.MatchingLabels(map[string]string{
-						api.WantInjectFromSecretNamespaceLabel: r.Opts.Namespace,
-						api.WantInjectFromSecretNameLabel:      r.Opts.Name,
+						api.WantInjectFromSecretNamespaceLabel: r.CAOptions.Namespace,
+						api.WantInjectFromSecretNameLabel:      r.CAOptions.Name,
 					})); err != nil {
 						log.FromContext(ctx).Error(err, "when listing injectables")
 						return nil
@@ -83,23 +83,11 @@ func (r *InjectableReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func newUnstructured(injectable injectable.Injectable) *unstructured.Unstructured {
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(injectable.GroupVersionKind())
-	return obj
-}
-
-func newUnstructuredList(injectable injectable.Injectable) *unstructured.UnstructuredList {
-	obj := &unstructured.UnstructuredList{}
-	obj.SetGroupVersionKind(injectable.GroupVersionKind())
-	return obj
-}
-
 func (r *InjectableReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
 	secret := &corev1.Secret{}
-	if err := r.Cache.Get(ctx, types.NamespacedName{Namespace: r.Opts.Namespace, Name: r.Opts.Name}, secret); err != nil {
+	if err := r.Cache.Get(ctx, r.CAOptions.NamespacedName, secret); err != nil {
 		if errors.IsNotFound(err) {
 			log.FromContext(ctx).V(1).Info("CA secret not yet found, requeueing request...")
 			return ctrl.Result{Requeue: true}, nil
@@ -111,7 +99,7 @@ func (r *InjectableReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *InjectableReconciler) reconcileInjectable(ctx context.Context, req ctrl.Request, caBundle []byte) error {
-	obj := newUnstructured(r.Injectable)
+	obj := injectable.NewUnstructured(r.Injectable)
 	if err := r.Cache.Get(ctx, req.NamespacedName, obj); err != nil {
 		return err
 	}
@@ -121,7 +109,7 @@ func (r *InjectableReconciler) reconcileInjectable(ctx context.Context, req ctrl
 		return err
 	}
 
-	if err := r.Patcher.Patch(ctx, obj, newApplyPatch(ac), client.ForceOwnership, fieldOwner); err != nil {
+	if err := r.Patcher.Patch(ctx, obj, ssa.NewApplyPatch(ac), client.ForceOwnership, ssa.FieldOwner); err != nil {
 		return err
 	}
 

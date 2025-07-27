@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package leadercontrollers
+package authority
 
 import (
 	"context"
@@ -35,7 +35,8 @@ import (
 
 	"github.com/cert-manager/webhook-cert-lib/internal/pki"
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
-	"github.com/cert-manager/webhook-cert-lib/pkg/authority/cert"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/certificate"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/internal/ssa"
 )
 
 // CASecretReconciler reconciles a CA Secret object
@@ -49,8 +50,8 @@ func (r *CASecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.events = make(chan event.TypedGenericEvent[*corev1.Secret], 1)
 	r.events <- event.TypedGenericEvent[*corev1.Secret]{Object: &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.Opts.Name,
-			Namespace: r.Opts.Namespace,
+			Namespace: r.CAOptions.Namespace,
+			Name:      r.CAOptions.Name,
 		},
 	}}
 
@@ -80,7 +81,7 @@ func (r *CASecretReconciler) reconcileSecret(ctx context.Context, req ctrl.Reque
 
 	if generate || secret.Annotations[api.RenewCertificateSecretAnnotation] != secret.Annotations[api.RenewHandledCertificateSecretAnnotation] {
 		var err error
-		caCert, caPk, err = cert.GenerateCA(r.Opts.Duration)
+		caCert, caPk, err = certificate.GenerateCA(r.CAOptions.Duration)
 		if err != nil {
 			return err
 		}
@@ -114,7 +115,7 @@ func (r *CASecretReconciler) reconcileSecret(ctx context.Context, req ctrl.Reque
 		})
 	}
 
-	return r.Patcher.Patch(ctx, secret, newApplyPatch(ac), client.ForceOwnership, fieldOwner)
+	return r.Patcher.Patch(ctx, secret, ssa.NewApplyPatch(ac), client.ForceOwnership, ssa.FieldOwner)
 }
 
 func addCertToCABundle(logger logr.Logger, caBundleBytes []byte, caCert *x509.Certificate) []byte {

@@ -26,9 +26,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority"
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
-	leadercontrollers "github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers"
-	"github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers/injectable"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/injectable"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -60,6 +60,11 @@ var _ = Describe("Injectable Controller", Ordered, func() {
 		Expect(k8sClient.Create(ctx, caSecret)).To(Succeed())
 		caSecretRef = client.ObjectKeyFromObject(caSecret)
 
+		opts := authority.Options{
+			CAOptions: authority.CAOptions{
+				NamespacedName: caSecretRef,
+			}}
+
 		k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 			Scheme: scheme.Scheme,
 			Metrics: metricsserver.Options{
@@ -68,14 +73,12 @@ var _ = Describe("Injectable Controller", Ordered, func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 
-		controller := &leadercontrollers.InjectableReconciler{
-			Reconciler: leadercontrollers.Reconciler{
+		controller := &authority.InjectableReconciler{
+			Reconciler: authority.Reconciler{
 				Patcher: k8sManager.GetClient(),
 				Cache:   k8sManager.GetCache(),
-				Opts: leadercontrollers.CAOptions{
-					Name:      caSecretRef.Name,
-					Namespace: caSecretRef.Namespace,
-				}},
+				Options: opts,
+			},
 			Injectable: &injectable.ValidatingWebhookCaBundleInject{},
 		}
 		Expect(controller.SetupWithManager(k8sManager)).To(Succeed())

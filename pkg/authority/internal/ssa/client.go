@@ -14,18 +14,32 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package injectable
+package ssa
 
 import (
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/json"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/cert-manager/webhook-cert-lib/pkg/runtime"
 )
 
-type ApplyConfiguration interface {
-	GetName() *string
+const (
+	FieldOwner = client.FieldOwner("cert-manager-dynamic-authority")
+)
+
+func NewApplyPatch(ac runtime.ApplyConfiguration) ApplyPatch {
+	return ApplyPatch{ac: ac}
 }
 
-type Injectable interface {
-	GroupVersionKind() schema.GroupVersionKind
-	InjectCA(obj *unstructured.Unstructured, caBundle []byte) (ApplyConfiguration, error)
+type ApplyPatch struct {
+	ac runtime.ApplyConfiguration
+}
+
+func (p ApplyPatch) Type() types.PatchType {
+	return types.ApplyPatchType
+}
+
+func (p ApplyPatch) Data(_ client.Object) ([]byte, error) {
+	return json.Marshal(p.ac)
 }

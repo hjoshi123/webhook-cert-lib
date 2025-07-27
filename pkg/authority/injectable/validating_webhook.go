@@ -20,6 +20,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	admissionregistrationv1ac "k8s.io/client-go/applyconfigurations/admissionregistration/v1"
+
+	"github.com/cert-manager/webhook-cert-lib/pkg/runtime"
 )
 
 type ValidatingWebhookCaBundleInject struct {
@@ -35,7 +37,7 @@ func (i *ValidatingWebhookCaBundleInject) GroupVersionKind() schema.GroupVersion
 	}
 }
 
-func (i *ValidatingWebhookCaBundleInject) InjectCA(obj *unstructured.Unstructured, caBundle []byte) (ApplyConfiguration, error) {
+func (i *ValidatingWebhookCaBundleInject) InjectCA(obj *unstructured.Unstructured, caBundle []byte) (runtime.ApplyConfiguration, error) {
 	// TODO: Can we generalize this function for any resource based on a JSON path?
 
 	ac := admissionregistrationv1ac.ValidatingWebhookConfiguration(obj.GetName())

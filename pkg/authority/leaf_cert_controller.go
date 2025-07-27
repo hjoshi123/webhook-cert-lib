@@ -24,27 +24,24 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	"github.com/cert-manager/webhook-cert-lib/internal/pki"
-	"github.com/cert-manager/webhook-cert-lib/pkg/authority/cert"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/certificate"
 )
 
 // LeafCertReconciler reconciles the leaf/serving certificate
 type LeafCertReconciler struct {
-	Options           Options
-	Cache             cache.Cache
-	CertificateHolder *cert.CertificateHolder
+	Reconciler
+	CertificateHolder *certificate.Holder
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LeafCertReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("cert_leaf").
-		Watches(&corev1.Secret{}, &handler.TypedEnqueueRequestForObject[client.Object]{}).
+		WatchesRawSource(r.caSecretSource(&handler.TypedEnqueueRequestForObject[*corev1.Secret]{})).
 		// Disable leader election since all replicas need a serving certificate
 		WithOptions(controller.TypedOptions[ctrl.Request]{NeedLeaderElection: ptr.To(false)}).
 		Complete(r)
@@ -72,9 +69,9 @@ func (r *LeafCertReconciler) reconcileSecret(ctx context.Context, req ctrl.Reque
 		return err
 	}
 
-	cert, pk, err := cert.GenerateLeaf(
-		r.Options.LeafOptions.DNSNames,
-		r.Options.LeafOptions.Duration,
+	cert, pk, err := certificate.GenerateLeaf(
+		r.LeafOptions.DNSNames,
+		r.LeafOptions.Duration,
 		caCert, caPk,
 	)
 	if err != nil {
