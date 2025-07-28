@@ -14,11 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package leadercontrollers
+package authority
 
 import (
 	"context"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -32,7 +31,7 @@ import (
 type Reconciler struct {
 	Patcher Patcher
 	Cache   cache.Cache
-	Opts    CAOptions
+	Options
 }
 
 type Patcher interface {
@@ -41,24 +40,12 @@ type Patcher interface {
 	Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error
 }
 
-type CAOptions struct {
-	// The namespace used for certificate secrets.
-	Namespace string
-
-	// The name of the Secret used to store CA certificates.
-	Name string
-
-	// The amount of time the root CA certificate will be valid for.
-	// This must be greater than LeafDuration.
-	Duration time.Duration
-}
-
 func (r Reconciler) caSecretSource(handler handler.TypedEventHandler[*corev1.Secret, reconcile.Request]) source.SyncingSource {
 	return source.Kind(
 		r.Cache,
 		&corev1.Secret{},
 		handler,
 		predicate.NewTypedPredicateFuncs[*corev1.Secret](func(obj *corev1.Secret) bool {
-			return obj.Namespace == r.Opts.Namespace && obj.Name == r.Opts.Name
+			return obj.Namespace == r.CAOptions.Namespace && obj.Name == r.CAOptions.Name
 		}))
 }

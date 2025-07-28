@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cert
+package certificate
 
 import (
 	"crypto"
@@ -102,11 +102,11 @@ var (
 	ErrCertNotAvailable = errors.New("no tls.Certificate available")
 )
 
-type CertificateHolder struct {
+type Holder struct {
 	certP atomic.Pointer[tls.Certificate]
 }
 
-func (h *CertificateHolder) GetCertificate(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
+func (h *Holder) GetCertificate(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	cert := h.certP.Load()
 	if cert == nil {
 		return nil, ErrCertNotAvailable
@@ -114,6 +114,6 @@ func (h *CertificateHolder) GetCertificate(_ *tls.ClientHelloInfo) (*tls.Certifi
 	return cert, nil
 }
 
-func (h *CertificateHolder) SetCertificate(cert *tls.Certificate) {
+func (h *Holder) SetCertificate(cert *tls.Certificate) {
 	h.certP.Store(cert)
 }

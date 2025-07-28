@@ -22,7 +22,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -30,36 +29,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
-	"github.com/cert-manager/webhook-cert-lib/pkg/authority/cert"
-	leadercontrollers "github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers"
-	"github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers/injectable"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/certificate"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority/injectable"
 )
-
-type LeafOptions struct {
-	DNSNames []string
-
-	// The amount of time leaf certificates signed by this authority will be
-	// valid for.
-	// This must be less than CADuration.
-	Duration time.Duration
-}
-
-type Options struct {
-	CAOptions   leadercontrollers.CAOptions
-	LeafOptions LeafOptions
-
-	Injectables []injectable.Injectable
-}
 
 type Authority struct {
 	Options Options
 
-	certificateHolder *cert.CertificateHolder
+	certificateHolder *certificate.Holder
 }
 
 func (o *Authority) ServingCertificate() func(config *tls.Config) {
 	if o.certificateHolder == nil {
-		o.certificateHolder = &cert.CertificateHolder{}
+		o.certificateHolder = &certificate.Holder{}
 	}
 	return func(config *tls.Config) {
 		config.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -99,8 +81,8 @@ func (o *Authority) SetupWithManager(mgr ctrl.Manager) error {
 			}),
 		},
 	}
-	for _, injectable := range o.Options.Injectables {
-		cacheByObject[newUnstructured(injectable)] = cache.ByObject{
+	for _, i := range o.Options.Injectables {
+		cacheByObject[injectable.NewUnstructured(i)] = cache.ByObject{
 			Label: labels.SelectorFromSet(labels.Set{
 				api.WantInjectFromSecretNameLabel:      o.Options.CAOptions.Name,
 				api.WantInjectFromSecretNamespaceLabel: o.Options.CAOptions.Namespace,
@@ -131,17 +113,17 @@ func (o *Authority) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	r := leadercontrollers.Reconciler{
+	r := Reconciler{
 		Patcher: controllerClient,
 		Cache:   controllerCache,
-		Opts:    o.Options.CAOptions,
+		Options: o.Options,
 	}
 	controllers := []dynamicAuthorityController{
-		&leadercontrollers.CASecretReconciler{Reconciler: r},
-		&LeafCertReconciler{Options: o.Options, Cache: controllerCache, CertificateHolder: o.certificateHolder},
+		&CASecretReconciler{Reconciler: r},
+		&LeafCertReconciler{Reconciler: r, CertificateHolder: o.certificateHolder},
 	}
-	for _, injectable := range o.Options.Injectables {
-		controllers = append(controllers, &leadercontrollers.InjectableReconciler{Reconciler: r, Injectable: injectable})
+	for _, i := range o.Options.Injectables {
+		controllers = append(controllers, &InjectableReconciler{Reconciler: r, Injectable: i})
 	}
 	for _, c := range controllers {
 		if err := c.SetupWithManager(mgr); err != nil {
@@ -154,10 +136,4 @@ func (o *Authority) SetupWithManager(mgr ctrl.Manager) error {
 
 type dynamicAuthorityController interface {
 	SetupWithManager(ctrl.Manager) error
-}
-
-func newUnstructured(injectable injectable.Injectable) *unstructured.Unstructured {
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(injectable.GroupVersionKind())
-	return obj
 }

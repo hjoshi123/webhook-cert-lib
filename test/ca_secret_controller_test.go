@@ -27,8 +27,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/cert-manager/webhook-cert-lib/internal/pki"
+	"github.com/cert-manager/webhook-cert-lib/pkg/authority"
 	"github.com/cert-manager/webhook-cert-lib/pkg/authority/api"
-	leadercontrollers "github.com/cert-manager/webhook-cert-lib/pkg/authority/leader_controllers"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -50,6 +50,12 @@ var _ = Describe("CA Secret Controller", Ordered, func() {
 			Name:      "ca-cert",
 		}
 
+		opts := authority.Options{
+			CAOptions: authority.CAOptions{
+				NamespacedName: caSecretRef,
+				Duration:       7 * time.Hour,
+			}}
+
 		k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 			Scheme: scheme.Scheme,
 			Metrics: metricsserver.Options{
@@ -58,15 +64,12 @@ var _ = Describe("CA Secret Controller", Ordered, func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 
-		controller := &leadercontrollers.CASecretReconciler{
-			Reconciler: leadercontrollers.Reconciler{
+		controller := &authority.CASecretReconciler{
+			Reconciler: authority.Reconciler{
 				Patcher: k8sManager.GetClient(),
 				Cache:   k8sManager.GetCache(),
-				Opts: leadercontrollers.CAOptions{
-					Name:      caSecretRef.Name,
-					Namespace: caSecretRef.Namespace,
-					Duration:  7 * time.Hour,
-				}}}
+				Options: opts,
+			}}
 		Expect(controller.SetupWithManager(k8sManager)).To(Succeed())
 
 		go func() {
