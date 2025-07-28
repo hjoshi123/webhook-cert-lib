@@ -18,10 +18,10 @@ package authority
 
 import (
 	"context"
-	"crypto/tls"
+	"crypto"
+	"crypto/x509"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -35,6 +35,7 @@ import (
 type LeafCertReconciler struct {
 	Reconciler
 	CertificateHolder *certificate.Holder
+	Options           Options
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -48,51 +49,41 @@ func (r *LeafCertReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *LeafCertReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	return ctrl.Result{}, r.reconcileSecret(ctx, req)
-}
-
-func (r *LeafCertReconciler) reconcileSecret(ctx context.Context, req ctrl.Request) error {
 	caSecret := &corev1.Secret{}
 	if err := r.Cache.Get(ctx, req.NamespacedName, caSecret); err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return err
+		return ctrl.Result{}, err
 	}
 
+	cert, pk, err := r.generateCertificate(caSecret)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	tlsCert, err := pki.ToTLSCertificate(cert, pk)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	r.CertificateHolder.SetCertificate(&tlsCert)
+
+	return ctrl.Result{RequeueAfter: certificate.RenewAfter(cert)}, nil
+}
+
+func (r *LeafCertReconciler) generateCertificate(caSecret *corev1.Secret) (cert *x509.Certificate, pk crypto.Signer, err error) {
 	caCert, err := pki.DecodeX509CertificateBytes(caSecret.Data[corev1.TLSCertKey])
 	if err != nil {
-		return err
+		return cert, pk, err
 	}
 	caPk, err := pki.DecodePrivateKeyBytes(caSecret.Data[corev1.TLSPrivateKeyKey])
 	if err != nil {
-		return err
+		return cert, pk, err
 	}
 
-	cert, pk, err := certificate.GenerateLeaf(
+	cert, pk, err = certificate.GenerateLeaf(
 		r.LeafOptions.DNSNames,
 		r.LeafOptions.Duration,
 		caCert, caPk,
 	)
 	if err != nil {
-		return err
+		return cert, pk, err
 	}
-
-	pkData, err := pki.EncodePrivateKey(pk)
-	if err != nil {
-		return err
-	}
-
-	certData, err := pki.EncodeX509(cert)
-	if err != nil {
-		return err
-	}
-
-	tlsCert, err := tls.X509KeyPair(certData, pkData)
-	if err != nil {
-		return err
-	}
-
-	r.CertificateHolder.SetCertificate(&tlsCert)
-	return nil
+	return cert, pk, err
 }
