@@ -1,0 +1,101 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  enabled: true,
+  extends: [
+    'config:recommended',
+    ':dependencyDashboard',
+    ':gitSignOff',
+    'helpers:pinGitHubActionDigests',
+  ],
+  timezone: 'Europe/London',
+  labels: [
+    'dependencies',
+    'renovate',
+  ],
+  semanticCommits: 'enabled',
+  postUpgradeTasks: {
+    commands: [
+      "make generate",
+    ],
+    executionMode: 'branch',
+  },
+  vulnerabilityAlerts: {
+    enabled: false,
+  },
+  packageRules: [
+    {
+      description: 'Miscellaneous packages',
+      matchDatasources: [
+        'go',
+      ],
+      groupName: 'misc',
+      matchPackageNames: ['*'],
+    },
+    {
+      description: 'Kubernetes dependencies',
+      matchDatasources: [
+        'go',
+      ],
+      matchPackageNames: [
+        'k8s.io{/,}**',
+        'sigs.k8s.io{/,}**',
+      ],
+      groupName: 'kubernetes',
+    },
+    {
+      description: 'Cloud dependencies',
+      matchDatasources: [
+        'go',
+      ],
+      groupName: 'cloud',
+      matchPackageNames: [
+        'github.com/Azure{/,}**',
+        'github.com/AzureAD{/,}**',
+        'github.com/aws{/,}**',
+      ],
+    },
+    {
+      description: 'Golang dependencies',
+      groupName: 'go-deps',
+      matchPackageNames: [
+        'golang.org/x/**',
+        'github.com/golang{/,}**',
+        'github.com/golang-jwt{/,}**',
+        'github.com/google{/,}**',
+        'github.com/googleapis{/,}**',
+        '/^google.golang.org/',
+      ],
+    },
+    {
+      description: 'Group GitHub Actions',
+      matchManagers: [
+        'github-actions',
+      ],
+    },
+  ],
+  ignorePaths: [
+    '**/vendor/**',
+    '**/node_modules/**',
+    '**/__tests__/**',
+    '**/test/**',
+    '.github/workflows/govulncheck.yaml',
+    '.github/workflows/make-self-upgrade.yaml',
+    '.github/dependabot.yaml',
+  ],
+  prBodyDefinitions: {
+    Package: '{{depName}}',
+  },
+  prBodyColumns: [
+    'Package',
+    'Type',
+    'Update',
+    'Change',
+    'References',
+  ],
+  prBodyNotes: [
+    '/kind cleanup',
+    '### Release Note\n```release-note\nNONE\n```',
+    '**Note**: This PR was automatically created by Renovate Bot.',
+    '',
+  ],
+}
