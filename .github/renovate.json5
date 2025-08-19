@@ -10,7 +10,6 @@
   timezone: 'Europe/London',
   labels: [
     'dependencies',
-    'renovate',
   ],
   semanticCommits: 'enabled',
   postUpgradeTasks: {
@@ -24,7 +23,7 @@
   },
   packageRules: [
     {
-      description: 'Miscellaneous packages',
+      description: 'Miscellaneous dependencies',
       matchDatasources: [
         'go',
       ],
@@ -66,12 +65,14 @@
         '/^google.golang.org/',
       ],
     },
-    {
-      description: 'Group GitHub Actions',
-      matchManagers: [
-        'github-actions',
-      ],
-    },
+    // Currently, there seems to be issues with permissions which doesn't allow renovate to update actions.
+    // Grouping github actions is also an issue. Maybe adding groupName might help, but that's something to test.
+    // {
+    //   description: 'Group GitHub Actions',
+    //   matchManagers: [
+    //     'github-actions',
+    //   ],
+    // },
   ],
   ignorePaths: [
     '**/vendor/**',
