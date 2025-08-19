@@ -23,7 +23,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
         env:
           RENOVATE_REPOSITORIES: '["${{ github.repository }}"]'
-          RENOVATE_PLATFORM_COMMIT: "true"
           RENOVATE_ONBOARDING: "false"
           RENOVATE_PLATFORM: "github"
           LOG_LEVEL: "debug"
